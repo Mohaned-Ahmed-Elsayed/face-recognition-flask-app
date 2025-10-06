@@ -1,0 +1,45 @@
+# Python virtual environment
+venv/
+.env/
+
+# Python cache and temp files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Flask data
+instance/
+*.sqlite3
+*.db
+
+# DeepFace / OpenCV data
+known_faces/
+unknown_faces/
+logs.csv
+
+# OS & editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+
+
+# Ignore environment files
+.env
+.env.txt
+
+# Ignore logs
+*.log
+logs.csv
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
