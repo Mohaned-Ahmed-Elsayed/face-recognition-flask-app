@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Recognition Logs</title>
+  <style>
+    body { font-family: Arial; background: #fafafa; text-align: center; }
+    table { margin: 20px auto; border-collapse: collapse; width: 80%; }
+    th, td { padding: 10px; border: 1px solid #ddd; }
+    th { background: #007BFF; color: white; }
+    tr:nth-child(even) { background: #f2f2f2; }
+    a { display: block; margin: 20px; font-weight: bold; color: #007BFF; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+  <!-- 🔄 Auto-refresh logs every 5 seconds -->
+  <meta http-equiv="refresh" content="5">
+</head>
+<body>
+  <h2>📋 Recognition Logs</h2>
+  <table>
+    <tr>
+      <th>Time</th>
+      <th>Name</th>
+      <th>Distance</th>
+    </tr>
+    {% for row in logs %}
+    <tr>
+      <td>{{ row[0] }}</td>
+      <td>{{ row[1] }}</td>
+      <td>{{ row[2] }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <a href="/">⬅ Back to Camera</a>
+</body>
+</html>
