@@ -17,7 +17,7 @@ Unknown faces trigger an email alert with the captured image.
 
 ## 👥 Team Members
 - Mohaned Ismaeil  
-- Mahmoud Elgendy
+- @Mahmoudelgendy001
 - Amr Elboghdady
 - Mahmoud Amr
 - Aly Eldeeb 
