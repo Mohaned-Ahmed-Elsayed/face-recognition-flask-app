@@ -2,7 +2,7 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # Suppress TF logs
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  # Disable OneDNN spam logs
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 import cv2
 import threading
 import uuid
@@ -33,7 +33,9 @@ APP_PASSWORD = os.getenv("APP_PASSWORD")
 TO_EMAIL = os.getenv("TO_EMAIL")
 
 # -------- Load face model once --------
-FACE_MODEL = DeepFace.build_model("Facenet")
+FACE_MODEL = DeepFace.build_model("Facenet512")
+recognition_running = True
+
 DB = {}
 
 # -------- Normalize embeddings --------
@@ -85,7 +87,7 @@ def build_db():
             try:
                 rep = DeepFace.represent(
                     img_path=img_path,
-                    model_name="Facenet",
+                    model_name="Facenet512",
                     enforce_detection=False,
                 )
                 if rep and "embedding" in rep[0]:
@@ -104,6 +106,73 @@ def log_recognition(name, dist):
     with open(LOG_FILE, "a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow([ts, name, f"{dist:.4f}"])
+
+#------------recognition------
+def run_recognition_loop():
+    global last_detections
+
+    face_detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+
+    frame_counter = 0
+    recognition_interval = 10  # run deep recognition every 10 frames
+
+    while recognition_running:
+        success, frame = camera.read()
+        if not success:
+            continue
+
+        frame = cv2.resize(frame, (320, 240))
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
+
+        new_detections = []
+
+        # run DeepFace recognition only every Nth frame
+        if frame_counter % recognition_interval == 0:
+            for (x, y, w, h) in faces:
+                face_img = frame[y:y+h, x:x+w]
+                label = "Unknown"
+                color = (0, 0, 255)
+                best_dist = 100
+
+                try:
+                    rep = DeepFace.represent(face_img, model_name="Facenet512", enforce_detection=False)
+                    if rep and "embedding" in rep[0]:
+                        embedding = normalize(np.array(rep[0]["embedding"]))
+                        best_match = None
+
+                        for person, embeddings in DB.items():
+                            for e in embeddings:
+                                dist = np.linalg.norm(embedding - e)
+                                if dist < best_dist:
+                                    best_dist = dist
+                                    best_match = person
+
+                        if best_match and best_dist < 0.8:
+                            label = best_match
+                            color = (0, 255, 0)
+                        else:
+                            filename = f"{uuid.uuid4().hex}.jpg"
+                            temp_path = os.path.join(UNKNOWN_DIR, filename)
+                            cv2.imwrite(temp_path, face_img)
+                            send_email_with_throttle(temp_path, "http://localhost:5000/")
+
+                        log_recognition(label, best_dist)
+                except Exception as e:
+                    print("Recognition error:", e)
+
+                new_detections.append((x, y, w, h, label, color))
+        else:
+            # Only update boxes without re-recognizing (smooth movement)
+            for (x, y, w, h) in faces:
+                new_detections.append((x, y, w, h, label,color))
+
+        if new_detections:
+            last_detections = new_detections
+
+        frame_counter += 1
+
+
 
 # -------- Email alerts with throttling --------
 last_email_time = 0
@@ -145,68 +214,15 @@ def send_email(image_path, add_url):
 
 # -------- Video stream with recognition --------
 frame_count = 0
-last_detections = []
-
 def gen_frames():
-    global frame_count, last_detections
+    global last_detections
     while True:
         success, frame = camera.read()
         if not success:
             break
+        frame = cv2.resize(frame, (320, 240))
 
-        frame = cv2.resize(frame, (480, 360))
-
-        frame_count += 1
-
-        run_recognition = frame_count % 10 == 0
-
-        if run_recognition:
-            new_detections = []
-            try:
-                detections = DeepFace.extract_faces(frame, detector_backend="retinaface", enforce_detection=False)
-            except Exception:
-                detections = []
-
-            for face in detections:
-                fa = face["facial_area"]
-                x, y, w, h = fa["x"], fa["y"], fa["w"], fa["h"]
-                face_img = frame[y:y+h, x:x+w]
-
-                label = "Unknown"
-                color = (0, 0, 255)
-                best_dist = 100
-
-                try:
-                    rep = DeepFace.represent(face_img, model_name="Facenet", enforce_detection=False)
-                    if rep and "embedding" in rep[0]:
-                        embedding = normalize(np.array(rep[0]["embedding"]))
-                        best_match = None
-
-                        for person, embeddings in DB.items():
-                            for e in embeddings:
-                                dist = np.linalg.norm(embedding - e)
-                                if dist < best_dist:
-                                    best_dist = dist
-                                    best_match = person
-
-                        if best_match and best_dist < 0.8:  # stricter threshold
-                            label = best_match
-                            color = (0, 255, 0)
-                        else:
-                            filename = f"{uuid.uuid4().hex}.jpg"
-                            temp_path = os.path.join(UNKNOWN_DIR, filename)
-                            cv2.imwrite(temp_path, face_img)
-                            send_email_with_throttle(temp_path, "http://localhost:5000/")
-
-                        log_recognition(label, best_dist)
-                except Exception as e:
-                    print("Recognition error:", e)
-
-                new_detections.append((x, y, w, h, label, color))
-
-            if new_detections:
-                last_detections = new_detections
-
+        # Draw last known detections (updated by thread)
         for (x, y, w, h, label, color) in last_detections:
             cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
             cv2.putText(frame, label, (x, y-10),
@@ -215,6 +231,7 @@ def gen_frames():
         _, buffer = cv2.imencode('.jpg', frame)
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+
 
 # -------- Routes --------
 @app.route('/video_feed')
@@ -233,35 +250,6 @@ def view_logs():
             reader = csv.reader(f)
             logs = list(reader)[::-1]  # newest first
     return render_template("logs.html", logs=logs)
-
-# -------- Add person from camera --------
-@app.route("/add_person/camera", methods=["POST"])
-def add_person_camera():
-    global DB
-    name = request.form.get("name", "Unknown").strip()
-    success, frame = camera.read()
-    if not success:
-        return jsonify({"status": "error", "msg": "camera failed"}), 500
-
-    # crop detected face if possible
-    detections = DeepFace.extract_faces(frame, detector_backend="retinaface", enforce_detection=False)
-    if detections:
-        fa = detections[0]["facial_area"]
-        x, y, w, h = fa["x"], fa["y"], fa["w"], fa["h"]
-        face_img = frame[y:y+h, x:x+w]
-    else:
-        face_img = frame
-
-    person_dir = os.path.join(KNOWN_FACES_DIR, name)
-    os.makedirs(person_dir, exist_ok=True)
-
-    filename = f"{uuid.uuid4().hex}.jpg"
-    save_path = os.path.join(person_dir, filename)
-    cv2.imwrite(save_path, face_img)
-
-    augment_face(save_path, person_dir, name)
-    build_db()
-    return jsonify({"status": "ok", "msg": f"{name} added from camera"})
 
 # -------- Add person from file --------
 @app.route("/add_person/file", methods=["POST"])
@@ -284,12 +272,28 @@ def add_person_file():
     build_db()
     return jsonify({"status": "ok", "msg": f"{name} added from file"})
 
+
 # -------- Run App --------
 if __name__ == "__main__":
     build_db()
+    last_detections = []
+    # ✅ Start recognition in the background
+    recognition_thread = threading.Thread(target=run_recognition_loop, daemon=True)
+    recognition_thread.start()
+    import atexit
+    def cleanup():
+      global recognition_running, camera
+      recognition_running = False
+      camera.release()
+      print("🧹 Cleaned up camera and stopped recognition thread.")
+    atexit.register(cleanup)
+
+    # ✅ Launch Flask app and open it automatically
     url = "http://127.0.0.1:5000/"
     threading.Timer(1, lambda: webbrowser.open(url)).start()
+
     app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+
 
 
 

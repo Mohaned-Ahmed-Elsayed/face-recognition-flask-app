@@ -1,53 +1,103 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Face Recognition</title>
+  <meta charset="UTF-8">
+  <title>Face Recognition System</title>
   <style>
-    body { font-family: Arial; background: #fff; text-align: center; }
-    h2 { color: #333; }
-    .form-container { margin: 20px auto; }
-    input, button { padding: 10px; margin: 5px; }
-    button { background: #007BFF; color: white; border: none; border-radius: 5px; cursor: pointer; }
-    a { display: block; margin: 20px; font-weight: bold; color: #007BFF; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f4f7fa;
+      color: #333;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+    h2 {
+      color: #007BFF;
+    }
+    img {
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      margin: 20px 0;
+    }
+    .form-container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      width: 400px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    input, button {
+      padding: 10px;
+      margin: 8px;
+      width: 80%;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    button {
+      background: #007BFF;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    a {
+      display: inline-block;
+      margin-top: 20px;
+      color: #007BFF;
+      font-weight: bold;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    #status {
+      margin-top: 15px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
-  <h2>📷 Live Webcam Recognition</h2>
+  <h2>📷 Live Face Recognition</h2>
+
+  <!-- Live camera feed -->
   <img src="{{ url_for('video_feed') }}" width="640" height="480" />
 
   <div class="form-container">
-    <h3>➕ Add Person</h3>
-    <form id="cameraForm">
-      <input type="text" name="name" placeholder="Enter name" required />
-      <button type="submit">Add From Camera</button>
-    </form>
+    <!-- Add from file -->
     <form id="fileForm" enctype="multipart/form-data">
       <input type="text" name="name" placeholder="Enter name" required />
       <input type="file" name="file" required />
       <button type="submit">Add From File</button>
     </form>
+
+    <div id="status"></div>
   </div>
 
   <a href="/logs">📋 View Recognition Logs</a>
 
   <script>
+    const statusDiv = document.getElementById("status");
+
     async function handleForm(form, url) {
       const formData = new FormData(form);
+      statusDiv.textContent = "⏳ Processing...";
       try {
         const res = await fetch(url, { method: "POST", body: formData });
         const data = await res.json();
-        alert(data.msg || "✅ Done!");
+        statusDiv.textContent = data.msg || "✅ Done!";
       } catch (err) {
-        alert("❌ Error: " + err.message);
+        statusDiv.textContent = "❌ Error: " + err.message;
       }
     }
 
-    document.getElementById("cameraForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      await handleForm(e.target, "/add_person/camera");
-    });
-
+    // Handle file upload
     document.getElementById("fileForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       await handleForm(e.target, "/add_person/file");
@@ -55,6 +105,8 @@
   </script>
 </body>
 </html>
+
+
 
 
 
